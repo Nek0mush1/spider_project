@@ -96,9 +96,17 @@ class MySQLPipeline:
             return
         df = pd.DataFrame(self.items).drop_duplicates(subset=["detail_url"])
         if self.mysql_ok:
-            spider.logger.info(f"Saving {len(df)} books to MySQL")
-            df.to_sql("books", self.engine, if_exists="append", index=False, method="multi", chunksize=100)
-            spider.logger.info("MySQL save done")
+            try:
+                existing = pd.read_sql("SELECT detail_url FROM books", self.engine)
+                known = set(existing["detail_url"].dropna().tolist())
+                before = len(df)
+                df = df[~df["detail_url"].isin(known)]
+                spider.logger.info(f"Saving {len(df)} books to MySQL ({before - len(df)} duplicates skipped)")
+                if not df.empty:
+                    df.to_sql("books", self.engine, if_exists="append", index=False, method="multi", chunksize=100)
+                spider.logger.info("MySQL save done")
+            except Exception as e:
+                spider.logger.warning(f"MySQL save failed ({e}), CSV saved anyway")
         os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
         df.to_csv(self.csv_path, index=False, encoding="utf-8-sig")
         spider.logger.info(f"CSV saved to {self.csv_path}")

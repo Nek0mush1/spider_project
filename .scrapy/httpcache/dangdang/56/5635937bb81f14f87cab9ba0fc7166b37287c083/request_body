@@ -1,0 +1,12 @@
+{
+    "cookies": [],
+    "headers": {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0"
+    },
+    "lua_source": "\nfunction main(splash, args)\n    assert(splash:go(args.url))\n    assert(splash:wait(args.wait or 2))\n    return splash:html()\nend\n",
+    "url": "http://category.dangdang.com/cp01.01.05.00.00.00.html",
+    "wait": 3
+}
