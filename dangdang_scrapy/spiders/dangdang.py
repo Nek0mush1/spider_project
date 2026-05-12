@@ -27,8 +27,8 @@ class DangdangSpider(scrapy.Spider):
     ]
 
     custom_settings = {
-        "CONCURRENT_REQUESTS": 2,
-        "DOWNLOAD_DELAY": 3.0,
+        "CONCURRENT_REQUESTS": 3,
+        "DOWNLOAD_DELAY": 2.5,
     }
 
     def start_requests(self):

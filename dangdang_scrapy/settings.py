@@ -12,6 +12,15 @@ HTTPCACHE_STORAGE = "scrapy_splash.SplashAwareFSCacheStorage"
 
 SPLASH_COOKIES_DEBUG = False
 
+HTTPCACHE_ENABLED = True
+HTTPCACHE_EXPIRATION_SECS = 3600
+
+DOWNLOAD_TIMEOUT = 60
+RETRY_TIMES = 3
+RETRY_HTTP_CODES = [504, 502, 500, 403, 429]
+
+SCHEDULER_PERSIST = True
+
 DOWNLOADER_MIDDLEWARES = {
     "scrapy_splash.SplashCookiesMiddleware": 723,
     "scrapy_splash.SplashMiddleware": 725,
