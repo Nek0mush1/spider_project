@@ -1,38 +1,27 @@
 import scrapy
-from scrapy_splash import SplashRequest
+import re
+from scrapy_playwright.page import PageMethod
 from sqlalchemy import create_engine, text
-
-LUA_SCRIPT = """
-function main(splash, args)
-    assert(splash:go(args.url))
-    assert(splash:wait(args.wait or 1.5))
-    return splash:html()
-end
-"""
 
 
 class DangdangDetailSpider(scrapy.Spider):
     name = "dangdang_detail"
-    allowed_domains = ["product.dangdang.com", "dangdang.com", "127.0.0.1"]
+    allowed_domains = ["product.dangdang.com", "dangdang.com"]
 
     custom_settings = {
-        "CONCURRENT_REQUESTS": 3,
+        "CONCURRENT_REQUESTS": 6,
         "DOWNLOAD_DELAY": 2.0,
         "DOWNLOAD_TIMEOUT": 60,
         "RETRY_TIMES": 3,
         "RETRY_HTTP_CODES": [504, 502, 500, 403, 429],
         "ITEM_PIPELINES": {},
-        "DOWNLOADER_MIDDLEWARES": {
-            "scrapy_splash.SplashCookiesMiddleware": 723,
-            "scrapy_splash.SplashMiddleware": 725,
-            "scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware": 810,
-            "dangdang_scrapy.middlewares.RandomUserAgentMiddleware": 400,
+        "DOWNLOAD_HANDLERS": {
+            "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+            "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
         },
-        "SPIDER_MIDDLEWARES": {
-            "scrapy_splash.SplashDeduplicateArgsMiddleware": 100,
-        },
-        "DUPEFILTER_CLASS": "scrapy_splash.SplashAwareDupeFilter",
-        "SPLASH_URL": "http://127.0.0.1:8050",
+        "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
+        "PLAYWRIGHT_LAUNCH_OPTIONS": {"headless": True},
+        "PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT": 30000,
     }
 
     def __init__(self, *args, **kwargs):
@@ -46,15 +35,16 @@ class DangdangDetailSpider(scrapy.Spider):
         self.skipped = 0
 
     def start_requests(self):
-        rows = self._fetch_pending()
-        self.logger.info(f"Fetched {len(rows)} URLs to scrape for ratings")
-        for detail_url in rows:
-            yield SplashRequest(
+        urls = self._fetch_pending()
+        self.logger.info(f"Fetched {len(urls)} URLs to scrape for ratings")
+        for detail_url in urls:
+            yield scrapy.Request(
                 url=detail_url,
                 callback=self.parse,
-                args={"wait": 1.5, "lua_source": LUA_SCRIPT},
-                endpoint="execute",
-                meta={"detail_url": detail_url},
+                meta={"detail_url": detail_url, "playwright": True,
+                "playwright_page_methods": [
+                    PageMethod("wait_for_selector", "span.star_box, #comm_num_down", timeout=15000),
+                ],},
                 errback=self.on_error,
             )
 
@@ -68,20 +58,17 @@ class DangdangDetailSpider(scrapy.Spider):
         """
         with self.engine.connect() as conn:
             result = conn.execute(text(sql), {"lim": limit})
-            urls = [row[0] for row in result]
-        self.logger.info(f"Fetched {len(urls)} URLs to scrape")
-        return urls
+            return [row[0] for row in result]
 
     def parse(self, response):
         detail_url = response.meta["detail_url"]
-        import re
-
         rating = None
+        rating_people = None
+
         m = re.search(r'<span class="star"[^>]*style="[^"]*width:\s*([\d.]+)%', response.text)
         if m:
             rating = float(m.group(1))
 
-        rating_people = None
         m = re.search(r'id="comm_num_down"[^>]*>(\d+)', response.text)
         if m:
             rating_people = int(m.group(1))
@@ -94,10 +81,7 @@ class DangdangDetailSpider(scrapy.Spider):
     def _update_db(self, detail_url, rating, rating_people):
         sql = "UPDATE books SET rating = :r, rating_people = :p WHERE detail_url = :u"
         with self.engine.begin() as conn:
-            result = conn.execute(
-                text(sql),
-                {"r": rating, "p": rating_people, "u": detail_url},
-            )
+            result = conn.execute(text(sql), {"r": rating, "p": rating_people, "u": detail_url})
             if result.rowcount > 0:
                 self.updated += 1
             else:

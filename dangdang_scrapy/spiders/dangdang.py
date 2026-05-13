@@ -1,22 +1,11 @@
 import scrapy
-from scrapy_splash import SplashRequest
+from scrapy_playwright.page import PageMethod
 from dangdang_scrapy.items import BookItem
-
-LUA_SCRIPT = """
-function main(splash, args)
-    assert(splash:go(args.url))
-    assert(splash:wait(args.wait or 1.5))
-    return splash:html()
-end
-"""
 
 
 class DangdangSpider(scrapy.Spider):
     name = "dangdang"
-    allowed_domains = [
-        "category.dangdang.com", "dangdang.com",
-        "product.dangdang.com", "127.0.0.1",
-    ]
+    allowed_domains = ["category.dangdang.com", "dangdang.com", "product.dangdang.com"]
 
     start_urls = [
         ("cp01.01.01.00.00.00.html", "标准"),
@@ -44,19 +33,26 @@ class DangdangSpider(scrapy.Spider):
     ]
 
     custom_settings = {
-        "CONCURRENT_REQUESTS": 3,
-        "DOWNLOAD_DELAY": 2.5,
+        "CONCURRENT_REQUESTS": 6,
+        "DOWNLOAD_DELAY": 2.0,
     }
 
     def start_requests(self):
         for path, layout in self.start_urls:
             url = f"http://category.dangdang.com/{path}"
-            cb = self.parse_standard if layout == "标准" else self.parse_promotional
-            yield SplashRequest(
-                url=url, callback=cb,
-                args={"wait": 1.5, "lua_source": LUA_SCRIPT},
-                endpoint="execute",
-                meta={"category": "图书", "layout": layout},
+            yield scrapy.Request(
+                url=url,
+                callback=self.parse_standard if layout == "标准" else self.parse_promotional,
+                meta={
+                    "category": "图书",
+                    "layout": layout,
+                    "playwright": True,
+                    "playwright_page_methods": [
+                        PageMethod("wait_for_selector",
+                                   "ul.bigimg, div.cloth_good_sort, span.search_now_price, span.d_price",
+                                   timeout=15000),
+                    ],
+                },
             )
 
     def parse_standard(self, response):
@@ -101,7 +97,7 @@ class DangdangSpider(scrapy.Spider):
             item["publisher"] = ""
             price_raw = book.css("span.d_price::text").get()
             if price_raw:
-                item["price"] = price_raw.replace("¥", "").strip()
+                item["price"] = price_raw.replace("\u00a5", "").strip()
             orig_els = book.css("p.price_p i.m_price")
             if len(orig_els) > 1:
                 item["original_price"] = orig_els[-1].css("::text").get("").strip()
@@ -118,9 +114,16 @@ class DangdangSpider(scrapy.Spider):
         if next_page and next_page != "javascript:;":
             next_url = response.urljoin(next_page)
             self.logger.info(f"Following next page: {next_url}")
-            yield SplashRequest(
-                url=next_url, callback=callback,
-                args={"wait": 1.5, "lua_source": LUA_SCRIPT},
-                endpoint="execute",
-                meta={"category": category},
+            yield scrapy.Request(
+                url=next_url,
+                callback=callback,
+                meta={
+                    "category": category,
+                    "playwright": True,
+                    "playwright_page_methods": [
+                        PageMethod("wait_for_selector",
+                                   "ul.bigimg, div.cloth_good_sort, span.search_now_price, span.d_price",
+                                   timeout=15000),
+                    ],
+                },
             )

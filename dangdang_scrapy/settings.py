@@ -5,37 +5,25 @@ NEWSPIDER_MODULE = "dangdang_scrapy.spiders"
 
 ROBOTSTXT_OBEY = False
 
-SPLASH_URL = "http://127.0.0.1:8051"
-SPLASH_URLS = [
-    "http://127.0.0.1:8051",
-    "http://127.0.0.1:8052",
-    "http://127.0.0.1:8053",
-]
-
-DUPEFILTER_CLASS = "scrapy_splash.SplashAwareDupeFilter"
-HTTPCACHE_STORAGE = "scrapy_splash.SplashAwareFSCacheStorage"
-
-SPLASH_COOKIES_DEBUG = False
-
-HTTPCACHE_ENABLED = True
-HTTPCACHE_EXPIRATION_SECS = 3600
-
 DOWNLOAD_TIMEOUT = 60
 RETRY_TIMES = 3
 RETRY_HTTP_CODES = [504, 502, 500, 403, 429]
 
-SCHEDULER_PERSIST = True
+CONCURRENT_REQUESTS = 6
+CONCURRENT_REQUESTS_PER_DOMAIN = 3
+DOWNLOAD_DELAY = 2.0
+RANDOMIZE_DOWNLOAD_DELAY = True
+
+DOWNLOAD_HANDLERS = {
+    "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+}
+TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
+PLAYWRIGHT_LAUNCH_OPTIONS = {"headless": True}
+PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT = 30000
 
 DOWNLOADER_MIDDLEWARES = {
-    "scrapy_splash.SplashCookiesMiddleware": 723,
-    "scrapy_splash.SplashMiddleware": 725,
-    "scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware": 810,
     "dangdang_scrapy.middlewares.RandomUserAgentMiddleware": 400,
-    "dangdang_scrapy.middlewares.SplashRoundRobinMiddleware": 722,
-}
-
-SPIDER_MIDDLEWARES = {
-    "scrapy_splash.SplashDeduplicateArgsMiddleware": 100,
 }
 
 ITEM_PIPELINES = {
@@ -43,10 +31,6 @@ ITEM_PIPELINES = {
     "dangdang_scrapy.pipelines.MySQLPipeline": 300,
 }
 
-CONCURRENT_REQUESTS = 6
-CONCURRENT_REQUESTS_PER_DOMAIN = 3
-DOWNLOAD_DELAY = 2.0
-RANDOMIZE_DOWNLOAD_DELAY = True
 
 AUTOTHROTTLE_ENABLED = True
 AUTOTHROTTLE_START_DELAY = 2.0
