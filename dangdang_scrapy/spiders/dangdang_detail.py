@@ -9,10 +9,10 @@ class DangdangDetailSpider(scrapy.Spider):
     allowed_domains = ["product.dangdang.com", "dangdang.com"]
 
     custom_settings = {
-        "CONCURRENT_REQUESTS": 6,
+        "CONCURRENT_REQUESTS": 3,
         "DOWNLOAD_DELAY": 2.0,
-        "DOWNLOAD_TIMEOUT": 60,
-        "RETRY_TIMES": 3,
+        "DOWNLOAD_TIMEOUT": 30,
+        "RETRY_TIMES": 2,
         "RETRY_HTTP_CODES": [504, 502, 500, 403, 429],
         "ITEM_PIPELINES": {},
         "DOWNLOAD_HANDLERS": {
@@ -43,21 +43,20 @@ class DangdangDetailSpider(scrapy.Spider):
                 callback=self.parse,
                 meta={"detail_url": detail_url, "playwright": True,
                 "playwright_page_methods": [
-                    PageMethod("wait_for_selector", "span.star_box, #comm_num_down", timeout=15000),
+                    PageMethod("wait_for_timeout", 3000),
                 ],},
                 errback=self.on_error,
             )
 
-    def _fetch_pending(self, limit=200):
+    def _fetch_pending(self):
         sql = """
             SELECT detail_url FROM books
             WHERE detail_url LIKE '%product.dangdang.com%'
               AND (rating IS NULL OR rating = 0 OR rating_people IS NULL OR rating_people = 0)
             ORDER BY id
-            LIMIT :lim
         """
         with self.engine.connect() as conn:
-            result = conn.execute(text(sql), {"lim": limit})
+            result = conn.execute(text(sql))
             return [row[0] for row in result]
 
     def parse(self, response):
