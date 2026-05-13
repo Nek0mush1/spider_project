@@ -27,8 +27,7 @@ class DangdangDetailSpider(scrapy.Spider):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.engine = create_engine(
-            "mysql+pymysql://root:su_yuan19820409@172.27.80.1:3306/"
-            "dangdang_books?charset=utf8mb4",
+            "postgresql+psycopg2://dangdang:@localhost:5433/dangdang_books",
             connect_args={"connect_timeout": 5},
         )
         self.updated = 0

@@ -48,6 +48,8 @@ DEFAULT_REQUEST_HEADERS = {
 FEED_EXPORT_ENCODING = "utf-8"
 FEED_EXPORT_INDENT = 2
 
+DATABASE_URL = "postgresql+psycopg2://dangdang:@localhost:5433/dangdang_books"
+
 MYSQL_HOST = "172.27.80.1"
 MYSQL_PORT = 3306
 MYSQL_USER = "root"

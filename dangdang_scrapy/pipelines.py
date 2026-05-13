@@ -49,46 +49,43 @@ class MySQLPipeline:
 
     def open_spider(self, spider):
         self.items = []
-        self.csv_header_written = False
         self.csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "books.csv")
-        host = spider.settings.get("MYSQL_HOST")
+        db_url = spider.settings.get("DATABASE_URL",
+            f"postgresql+psycopg2://dangdang:@localhost:5433/dangdang_books")
         try:
-            self.engine = create_engine(
-                f"mysql+pymysql://{spider.settings.get('MYSQL_USER')}:"
-                f"{spider.settings.get('MYSQL_PASSWORD')}@{host}:"
-                f"{spider.settings.get('MYSQL_PORT')}/"
-                f"{spider.settings.get('MYSQL_DATABASE')}?charset=utf8mb4",
-                connect_args={"connect_timeout": 5},
-            )
+            self.engine = create_engine(db_url, connect_args={"connect_timeout": 5})
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             self._create_table()
-            self.mysql_ok = True
-            spider.logger.info(f"MySQL connected via {host}")
+            self.db_ok = True
+            spider.logger.info("PostgreSQL connected")
         except Exception as e:
-            self.mysql_ok = False
-            spider.logger.warning(f"MySQL unavailable ({e}), falling back to CSV")
+            self.db_ok = False
+            spider.logger.warning(f"Database unavailable ({e}), falling back to CSV")
 
     def _create_table(self):
         ddl = text("""
             CREATE TABLE IF NOT EXISTS books (
-                id INT AUTO_INCREMENT PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
                 name VARCHAR(500),
                 author VARCHAR(500),
                 publisher VARCHAR(300),
-                price FLOAT,
-                original_price FLOAT,
-                rating FLOAT,
-                rating_people INT,
-                sales INT,
+                price DOUBLE PRECISION,
+                original_price DOUBLE PRECISION,
+                rating DOUBLE PRECISION,
+                rating_people INTEGER,
+                sales INTEGER,
                 detail_url VARCHAR(1000),
                 category VARCHAR(200),
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE KEY uk_url (detail_url(255))
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
         """)
         with self.engine.begin() as conn:
             conn.execute(ddl)
+            conn.execute(text("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_books_url
+                ON books (detail_url)
+            """))
 
     def process_item(self, item, spider):
         self.items.append(dict(item))
@@ -105,18 +102,18 @@ class MySQLPipeline:
             return
         df = pd.DataFrame(self.items).drop_duplicates(subset=["detail_url"])
         self.items = []
-        if self.mysql_ok:
+        if self.db_ok:
             try:
                 existing = pd.read_sql("SELECT detail_url FROM books", self.engine)
                 known = set(existing["detail_url"].dropna().tolist())
                 before = len(df)
                 df = df[~df["detail_url"].isin(known)]
-                spider.logger.info(f"Saving {len(df)} books to MySQL ({before - len(df)} duplicates skipped)")
+                spider.logger.info(f"Saving {len(df)} books to DB ({before - len(df)} duplicates skipped)")
                 if not df.empty:
                     df.to_sql("books", self.engine, if_exists="append", index=False, method="multi", chunksize=100)
-                spider.logger.info(f"MySQL batch saved, total {len(self.items)} pending in memory")
+                spider.logger.info(f"DB batch saved, {len(self.items)} pending in memory")
             except Exception as e:
-                spider.logger.warning(f"MySQL save failed ({e}), CSV saved anyway")
+                spider.logger.warning(f"DB save failed ({e}), CSV saved anyway")
         os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
         df.to_csv(self.csv_path, index=False, encoding="utf-8-sig",
                   mode="a", header=not os.path.exists(self.csv_path))

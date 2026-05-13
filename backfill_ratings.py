@@ -11,10 +11,9 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
 ]
 
-engine = create_engine(
-    "mysql+pymysql://root:su_yuan19820409@172.27.80.1:3306/dangdang_books?charset=utf8mb4",
-    connect_args={"connect_timeout": 10},
-)
+DB_URL = "postgresql+psycopg2://dangdang:@localhost:5433/dangdang_books"
+
+engine = create_engine(DB_URL, connect_args={"connect_timeout": 10})
 
 def fetch_pending():
     sql = """SELECT id, detail_url FROM books
@@ -38,10 +37,7 @@ def process_one(args):
         if r.status_code != 200:
             return ("fail", id_, url, None, None)
         rating, people = extract_rating(r.text)
-        local_engine = create_engine(
-            "mysql+pymysql://root:su_yuan19820409@172.27.80.1:3306/dangdang_books?charset=utf8mb4",
-            connect_args={"connect_timeout": 5},
-        )
+        local_engine = create_engine(DB_URL, connect_args={"connect_timeout": 5})
         with local_engine.begin() as conn:
             conn.execute(
                 text("UPDATE books SET rating=:r, rating_people=:p WHERE id=:id"),
