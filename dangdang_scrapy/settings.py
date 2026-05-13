@@ -5,7 +5,12 @@ NEWSPIDER_MODULE = "dangdang_scrapy.spiders"
 
 ROBOTSTXT_OBEY = False
 
-SPLASH_URL = "http://127.0.0.1:8050"
+SPLASH_URL = "http://127.0.0.1:8051"
+SPLASH_URLS = [
+    "http://127.0.0.1:8051",
+    "http://127.0.0.1:8052",
+    "http://127.0.0.1:8053",
+]
 
 DUPEFILTER_CLASS = "scrapy_splash.SplashAwareDupeFilter"
 HTTPCACHE_STORAGE = "scrapy_splash.SplashAwareFSCacheStorage"
@@ -26,6 +31,7 @@ DOWNLOADER_MIDDLEWARES = {
     "scrapy_splash.SplashMiddleware": 725,
     "scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware": 810,
     "dangdang_scrapy.middlewares.RandomUserAgentMiddleware": 400,
+    "dangdang_scrapy.middlewares.SplashRoundRobinMiddleware": 722,
 }
 
 SPIDER_MIDDLEWARES = {
@@ -37,8 +43,8 @@ ITEM_PIPELINES = {
     "dangdang_scrapy.pipelines.MySQLPipeline": 300,
 }
 
-CONCURRENT_REQUESTS = 4
-CONCURRENT_REQUESTS_PER_DOMAIN = 2
+CONCURRENT_REQUESTS = 6
+CONCURRENT_REQUESTS_PER_DOMAIN = 3
 DOWNLOAD_DELAY = 2.0
 RANDOMIZE_DOWNLOAD_DELAY = True
 

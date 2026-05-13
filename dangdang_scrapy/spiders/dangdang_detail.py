@@ -58,16 +58,19 @@ class DangdangDetailSpider(scrapy.Spider):
                 errback=self.on_error,
             )
 
-    def _fetch_pending(self):
+    def _fetch_pending(self, limit=200):
         sql = """
             SELECT detail_url FROM books
             WHERE detail_url LIKE '%product.dangdang.com%'
               AND (rating IS NULL OR rating = 0 OR rating_people IS NULL OR rating_people = 0)
             ORDER BY id
+            LIMIT :lim
         """
         with self.engine.connect() as conn:
-            result = conn.execute(text(sql))
-            return [row[0] for row in result]
+            result = conn.execute(text(sql), {"lim": limit})
+            urls = [row[0] for row in result]
+        self.logger.info(f"Fetched {len(urls)} URLs to scrape")
+        return urls
 
     def parse(self, response):
         detail_url = response.meta["detail_url"]

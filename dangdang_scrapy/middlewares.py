@@ -1,5 +1,4 @@
 import random
-
 from scrapy.downloadermiddlewares.useragent import UserAgentMiddleware
 
 
@@ -16,3 +15,27 @@ class RandomUserAgentMiddleware(UserAgentMiddleware):
 
     def process_request(self, request, spider):
         request.headers["User-Agent"] = random.choice(self.user_agents)
+
+
+class SplashRoundRobinMiddleware:
+    instances = [
+        "http://127.0.0.1:8051",
+        "http://127.0.0.1:8052",
+        "http://127.0.0.1:8053",
+    ]
+    counter = 0
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        m = cls()
+        urls = crawler.settings.getlist("SPLASH_URLS")
+        if urls:
+            m.instances = urls
+        return m
+
+    def process_request(self, request, spider):
+        if "splash" in request.meta:
+            idx = self.counter % len(self.instances)
+            self.counter += 1
+            endpoint = self.instances[idx]
+            request.meta["splash"]["endpoint"] = endpoint + "/execute"

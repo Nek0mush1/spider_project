@@ -45,8 +45,11 @@ class BookCleaningPipeline:
 
 
 class MySQLPipeline:
+    BATCH_SIZE = 1000
+
     def open_spider(self, spider):
         self.items = []
+        self.csv_header_written = False
         self.csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "books.csv")
         host = spider.settings.get("MYSQL_HOST")
         try:
@@ -89,12 +92,19 @@ class MySQLPipeline:
 
     def process_item(self, item, spider):
         self.items.append(dict(item))
+        if len(self.items) >= self.BATCH_SIZE:
+            self._flush(spider)
         return item
 
     def close_spider(self, spider):
+        if self.items:
+            self._flush(spider)
+
+    def _flush(self, spider):
         if not self.items:
             return
         df = pd.DataFrame(self.items).drop_duplicates(subset=["detail_url"])
+        self.items = []
         if self.mysql_ok:
             try:
                 existing = pd.read_sql("SELECT detail_url FROM books", self.engine)
@@ -104,9 +114,10 @@ class MySQLPipeline:
                 spider.logger.info(f"Saving {len(df)} books to MySQL ({before - len(df)} duplicates skipped)")
                 if not df.empty:
                     df.to_sql("books", self.engine, if_exists="append", index=False, method="multi", chunksize=100)
-                spider.logger.info("MySQL save done")
+                spider.logger.info(f"MySQL batch saved, total {len(self.items)} pending in memory")
             except Exception as e:
                 spider.logger.warning(f"MySQL save failed ({e}), CSV saved anyway")
         os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
-        df.to_csv(self.csv_path, index=False, encoding="utf-8-sig")
-        spider.logger.info(f"CSV saved to {self.csv_path}")
+        df.to_csv(self.csv_path, index=False, encoding="utf-8-sig",
+                  mode="a", header=not os.path.exists(self.csv_path))
+        spider.logger.info(f"CSV batch appended ({len(df)} rows)")
