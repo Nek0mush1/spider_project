@@ -5,7 +5,7 @@ from dangdang_scrapy.items import BookItem
 LUA_SCRIPT = """
 function main(splash, args)
     assert(splash:go(args.url))
-    assert(splash:wait(args.wait or 2))
+    assert(splash:wait(args.wait or 1.5))
     return splash:html()
 end
 """
@@ -54,7 +54,7 @@ class DangdangSpider(scrapy.Spider):
             cb = self.parse_standard if layout == "标准" else self.parse_promotional
             yield SplashRequest(
                 url=url, callback=cb,
-                args={"wait": 3, "lua_source": LUA_SCRIPT},
+                args={"wait": 1.5, "lua_source": LUA_SCRIPT},
                 endpoint="execute",
                 meta={"category": "图书", "layout": layout},
             )
@@ -120,7 +120,7 @@ class DangdangSpider(scrapy.Spider):
             self.logger.info(f"Following next page: {next_url}")
             yield SplashRequest(
                 url=next_url, callback=callback,
-                args={"wait": 3, "lua_source": LUA_SCRIPT},
+                args={"wait": 1.5, "lua_source": LUA_SCRIPT},
                 endpoint="execute",
                 meta={"category": category},
             )
