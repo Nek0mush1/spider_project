@@ -24,9 +24,6 @@ class DangdangSpider(scrapy.Spider):
         "http://category.dangdang.com/cp01.01.04.00.00.00.html",
         "http://category.dangdang.com/cp01.01.05.00.00.00.html",
         "http://category.dangdang.com/cp01.01.01.00.00.00.html",
-        "http://category.dangdang.com/cp01.02.01.00.00.00.html",
-        "http://category.dangdang.com/cp01.03.01.00.00.00.html",
-        "http://category.dangdang.com/cp01.06.01.00.00.00.html",
     ]
 
     custom_settings = {
