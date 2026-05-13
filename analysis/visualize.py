@@ -76,7 +76,7 @@ def plot_sales_distribution(df):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mysql", default="postgresql+psycopg2://dangdang:@localhost:5433/dangdang_books")
+    parser.add_argument("--mysql", default="postgresql+psycopg2://dangdang:dangdang@localhost:5433/dangdang_books")
     parser.add_argument("--csv", help="从 CSV 文件读取")
     args = parser.parse_args()
 

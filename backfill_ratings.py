@@ -11,7 +11,7 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
 ]
 
-DB_URL = "postgresql+psycopg2://dangdang:@localhost:5433/dangdang_books"
+DB_URL = "postgresql+psycopg2://dangdang:dangdang@localhost:5433/dangdang_books"
 
 engine = create_engine(DB_URL, connect_args={"connect_timeout": 10})
 
