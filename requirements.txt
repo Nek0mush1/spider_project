@@ -1,6 +1,7 @@
 scrapy>=2.10
-scrapy-splash
+scrapy-playwright
+playwright
 pandas
 matplotlib
-PyMySQL
+psycopg2-binary
 SQLAlchemy
