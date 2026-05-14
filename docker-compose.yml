@@ -4,14 +4,15 @@ services:
     container_name: dangdang-pg
     ports:
       - "5433:5432"
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: dangdang
-      POSTGRES_PASSWORD: dangdang
-      POSTGRES_DB: dangdang_books
+      POSTGRES_USER: ${PG_USER:-dangdang}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-dangdang}
+      POSTGRES_DB: ${PG_DB:-dangdang_books}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
-      - ./data/books.csv:/tmp/books.csv:ro
     restart: unless-stopped
 
 volumes:

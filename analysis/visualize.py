@@ -9,6 +9,9 @@ from sqlalchemy import create_engine
 
 
 def load_data(engine_url):
+    if not engine_url:
+        import os
+        engine_url = os.environ.get("DATABASE_URL", "postgresql+psycopg2://dangdang:dangdang@localhost:5433/dangdang_books")
     engine = create_engine(engine_url)
     df = pd.read_sql("SELECT * FROM books", engine)
     return df
@@ -76,14 +79,14 @@ def plot_sales_distribution(df):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mysql", default="postgresql+psycopg2://dangdang:dangdang@localhost:5433/dangdang_books")
+    parser.add_argument("--db", default=None, help="数据库URL，默认从DATABASE_URL环境变量读取")
     parser.add_argument("--csv", help="从 CSV 文件读取")
     args = parser.parse_args()
 
     if args.csv:
         df = pd.read_csv(args.csv)
     else:
-        df = load_data(args.mysql)
+        df = load_data(args.db)
 
     print(f"共加载 {len(df)} 条记录")
     print(df.describe())

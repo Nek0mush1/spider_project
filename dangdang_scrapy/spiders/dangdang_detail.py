@@ -1,7 +1,11 @@
+import os
 import scrapy
-import re
 from scrapy_playwright.page import PageMethod
-from sqlalchemy import create_engine, text
+from dangdang_scrapy.db import get_engine
+from dangdang_scrapy.parsers import parse_detail_rating
+from sqlalchemy import text
+
+USE_PW = os.environ.get("DANGDANG_USE_PLAYWRIGHT", "").lower() in ("1", "true", "yes")
 
 
 class DangdangDetailSpider(scrapy.Spider):
@@ -11,79 +15,59 @@ class DangdangDetailSpider(scrapy.Spider):
     custom_settings = {
         "CONCURRENT_REQUESTS": 3,
         "DOWNLOAD_DELAY": 2.0,
-        "DOWNLOAD_TIMEOUT": 30,
         "RETRY_TIMES": 2,
-        "RETRY_HTTP_CODES": [504, 502, 500, 403, 429],
         "ITEM_PIPELINES": {},
-        "DOWNLOAD_HANDLERS": {
-            "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-            "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
-        },
-        "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
-        "PLAYWRIGHT_LAUNCH_OPTIONS": {"headless": True},
-        "PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT": 30000,
     }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.engine = create_engine(
-            "postgresql+psycopg2://dangdang:dangdang@localhost:5433/dangdang_books",
-            connect_args={"connect_timeout": 5},
-        )
+        self.engine = get_engine()
         self.updated = 0
         self.skipped = 0
+        self._batch = []
 
     def start_requests(self):
         urls = self._fetch_pending()
         self.logger.info(f"Fetched {len(urls)} URLs to scrape for ratings")
-        for detail_url in urls:
-            yield scrapy.Request(
-                url=detail_url,
-                callback=self.parse,
-                meta={"detail_url": detail_url, "playwright": True,
-                "playwright_page_methods": [
-                    PageMethod("wait_for_timeout", 3000),
-                ],},
-                errback=self.on_error,
-            )
+        for bid, detail_url in urls:
+            meta = {"id": bid, "detail_url": detail_url}
+            if USE_PW:
+                meta["playwright"] = True
+                meta["playwright_page_methods"] = [
+                    PageMethod("wait_for_timeout", 2000),
+                ]
+            yield scrapy.Request(url=detail_url, callback=self.parse, meta=meta)
 
     def _fetch_pending(self):
-        sql = """
-            SELECT detail_url FROM books
-            WHERE detail_url LIKE '%product.dangdang.com%'
-              AND (rating IS NULL OR rating = 0 OR rating_people IS NULL OR rating_people = 0)
-            ORDER BY id
-        """
+        sql = """SELECT id, detail_url FROM books
+                 WHERE detail_url LIKE '%product.dangdang.com%'
+                   AND (rating IS NULL OR rating = 0)
+                 ORDER BY id"""
         with self.engine.connect() as conn:
-            result = conn.execute(text(sql))
-            return [row[0] for row in result]
+            return [(row[0], row[1]) for row in conn.execute(text(sql))]
 
     def parse(self, response):
-        detail_url = response.meta["detail_url"]
-        rating = None
-        rating_people = None
+        bid = response.meta.get("id")
+        detail_url = response.meta.get("detail_url")
+        if not detail_url:
+            return
+        rating, people = parse_detail_rating(response.text)
+        self._batch.append((bid, detail_url, rating, people))
+        if len(self._batch) >= 100:
+            self._flush()
 
-        m = re.search(r'<span class="star"[^>]*style="[^"]*width:\s*([\d.]+)%', response.text)
-        if m:
-            rating = float(m.group(1))
-
-        m = re.search(r'id="comm_num_down"[^>]*>(\d+)', response.text)
-        if m:
-            rating_people = int(m.group(1))
-
-        self._update_db(detail_url, rating, rating_people)
-
-    def on_error(self, failure):
-        self.logger.warning(f"Failed: {failure.request.meta.get('detail_url','?')}")
-
-    def _update_db(self, detail_url, rating, rating_people):
-        sql = "UPDATE books SET rating = :r, rating_people = :p WHERE detail_url = :u"
+    def _flush(self):
+        if not self._batch:
+            return
         with self.engine.begin() as conn:
-            result = conn.execute(text(sql), {"r": rating, "p": rating_people, "u": detail_url})
-            if result.rowcount > 0:
-                self.updated += 1
-            else:
-                self.skipped += 1
+            for bid, url, rating, people in self._batch:
+                conn.execute(
+                    text("UPDATE books SET rating=:r, rating_people=:p WHERE id=:id"),
+                    {"r": rating, "p": people, "id": bid},
+                )
+        self.updated += len(self._batch)
+        self._batch = []
 
     def closed(self, reason):
-        self.logger.info(f"Done: {self.updated} updated, {self.skipped} skipped")
+        self._flush()
+        self.logger.info(f"Done: {self.updated} updated")

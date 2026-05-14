@@ -1,6 +1,24 @@
+import os
 import scrapy
-from scrapy_playwright.page import PageMethod
 from dangdang_scrapy.items import BookItem
+from dangdang_scrapy.parsers import parse_price, parse_rating_from_style, parse_review_count
+
+USE_PW = os.environ.get("DANGDANG_USE_PLAYWRIGHT", "").lower() in ("1", "true", "yes")
+
+
+def _request_meta():
+    meta = {}
+    if USE_PW:
+        from scrapy_playwright.page import PageMethod
+        meta["playwright"] = True
+        meta["playwright_page_methods"] = [
+            PageMethod(
+                "wait_for_selector",
+                "ul.bigimg, div.cloth_good_sort, span.search_now_price, span.d_price",
+                timeout=15000,
+            ),
+        ]
+    return meta
 
 
 class DangdangSpider(scrapy.Spider):
@@ -32,98 +50,70 @@ class DangdangSpider(scrapy.Spider):
         ("cp01.07.01.00.00.00.html", "促销"),
     ]
 
-    custom_settings = {
-        "CONCURRENT_REQUESTS": 6,
-        "DOWNLOAD_DELAY": 2.0,
-    }
-
     def start_requests(self):
         for path, layout in self.start_urls:
             url = f"http://category.dangdang.com/{path}"
+            cb = self.parse_standard if layout == "标准" else self.parse_promotional
             yield scrapy.Request(
                 url=url,
-                callback=self.parse_standard if layout == "标准" else self.parse_promotional,
-                meta={
-                    "category": "图书",
-                    "layout": layout,
-                    "playwright": True,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_selector",
-                                   "ul.bigimg, div.cloth_good_sort, span.search_now_price, span.d_price",
-                                   timeout=15000),
-                    ],
-                },
+                callback=cb,
+                meta={"category": "图书", **_request_meta()},
             )
 
     def parse_standard(self, response):
-        category = response.meta.get("category", "图书")
-        books = response.css("ul.bigimg li")
-        self.logger.info(f"[标准] {len(books)} books on {response.url}")
-
-        for book in books:
-            item = BookItem()
-            item["name"] = book.css("a.pic::attr(title)").get()
-            raw_url = book.css("a.pic::attr(href)").get()
-            if raw_url:
-                item["detail_url"] = ("http:" + raw_url) if raw_url.startswith("//") else response.urljoin(raw_url)
-            item["author"] = book.css("p.search_book_author a[name='itemlist-author']::text").get("").strip()
-            item["publisher"] = book.css("p.search_book_author a[name='P_cbs']::text").get("").strip()
-            price_text = book.css("span.search_now_price::text").get()
-            item["price"] = price_text.strip() if price_text else None
-            orig_text = book.css("span.search_pre_price::text").get()
-            item["original_price"] = orig_text.strip() if orig_text else None
-            rating_style = book.css("span.search_star_black span::attr(style)").get()
-            item["rating"] = rating_style
-            comment_text = book.css("a.search_comment_num::text").re_first(r"(\d+)")
-            item["rating_people"] = int(comment_text) if comment_text else None
-            item["sales"] = None
-            item["category"] = category
+        for item in self._parse_standard_items(response):
             yield item
-
-        self._follow_next(response, self.parse_standard, category)
+        yield from self._follow_next(response, self.parse_standard)
 
     def parse_promotional(self, response):
-        category = response.meta.get("category", "图书")
-        books = response.css("div.cloth_good_sort li")
-        self.logger.info(f"[促销] {len(books)} items on {response.url}")
+        for item in self._parse_promo_items(response):
+            yield item
+        yield from self._follow_next(response, self.parse_promotional)
 
-        for book in books:
+    def _parse_standard_items(self, response):
+        category = response.meta.get("category", "图书")
+        for book in response.css("ul.bigimg li"):
+            item = BookItem()
+            item["name"] = book.css("a.pic::attr(title)").get() or ""
+            raw_url = book.css("a.pic::attr(href)").get()
+            item["detail_url"] = ("http:" + raw_url) if raw_url and raw_url.startswith("//") else (response.urljoin(raw_url) if raw_url else None)
+            item["author"] = book.css("p.search_book_author a[name='itemlist-author']::text").get("").strip()
+            item["publisher"] = book.css("p.search_book_author a[name='P_cbs']::text").get("").strip()
+            item["price"] = parse_price(book.css("span.search_now_price::text").get())
+            item["original_price"] = parse_price(book.css("span.search_pre_price::text").get())
+            item["rating"] = parse_rating_from_style(book.css("span.search_star_black span::attr(style)").get())
+            item["rating_people"] = parse_review_count(book.css("a.search_comment_num::text").get())
+            item["sales"] = None
+            item["category"] = category
+            if item["name"]:
+                yield item
+
+    def _parse_promo_items(self, response):
+        category = response.meta.get("category", "图书")
+        for book in response.css("div.cloth_good_sort li"):
             item = BookItem()
             item["name"] = book.css("a.name::text").get("").strip() or None
             raw_url = book.css("a.pic::attr(href)").get()
-            if raw_url:
-                item["detail_url"] = ("http:" + raw_url) if raw_url.startswith("//") else response.urljoin(raw_url)
+            item["detail_url"] = ("http:" + raw_url) if raw_url and raw_url.startswith("//") else (response.urljoin(raw_url) if raw_url else None)
             item["author"] = ""
             item["publisher"] = ""
-            price_raw = book.css("span.d_price::text").get()
-            if price_raw:
-                item["price"] = price_raw.replace("\u00a5", "").strip()
+            item["price"] = parse_price(book.css("span.d_price::text").get())
             orig_els = book.css("p.price_p i.m_price")
-            if len(orig_els) > 1:
-                item["original_price"] = orig_els[-1].css("::text").get("").strip()
+            item["original_price"] = parse_price(orig_els[-1].css("::text").get()) if len(orig_els) > 1 else None
             item["rating"] = None
             item["rating_people"] = None
             item["sales"] = None
             item["category"] = category
-            yield item
+            if item["name"]:
+                yield item
 
-        self._follow_next(response, self.parse_promotional, category)
-
-    def _follow_next(self, response, callback, category):
+    def _follow_next(self, response, callback):
         next_page = response.css("a:contains('\u4e0b\u4e00\u9875')::attr(href)").get()
-        if next_page and next_page != "javascript:;":
+        if next_page and next_page not in ("javascript:;", "#"):
             next_url = response.urljoin(next_page)
-            self.logger.info(f"Following next page: {next_url}")
+            self.logger.info(f"Following next: {next_url}")
             yield scrapy.Request(
                 url=next_url,
                 callback=callback,
-                meta={
-                    "category": category,
-                    "playwright": True,
-                    "playwright_page_methods": [
-                        PageMethod("wait_for_selector",
-                                   "ul.bigimg, div.cloth_good_sort, span.search_now_price, span.d_price",
-                                   timeout=15000),
-                    ],
-                },
+                meta={"category": response.meta.get("category", "图书"), **_request_meta()},
             )
