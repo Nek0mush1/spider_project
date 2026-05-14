@@ -24,10 +24,10 @@ setup:
 	docker compose up -d
 	$(call wait_pg)
 	python -c "from dangdang_scrapy.db import init_db; init_db()"
-	python scripts/import_books.py 2>/dev/null || true
-	@echo "环境就绪！运行: make crawl"
+	@echo "环境就绪！运行: make crawl  (需要旧数据? make import)"
 
-import: $(wildcard data/*.csv)
+
+import: $(wildcard data/books.csv)
 	python scripts/import_books.py
 
 crawl:

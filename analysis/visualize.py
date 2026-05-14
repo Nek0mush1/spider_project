@@ -11,7 +11,11 @@ from sqlalchemy import create_engine
 def load_data(engine_url):
     if not engine_url:
         import os
-        engine_url = os.environ.get("DATABASE_URL", "postgresql+psycopg2://dangdang:dangdang@localhost:5433/dangdang_books")
+        from dotenv import load_dotenv
+        load_dotenv()
+        engine_url = os.environ.get("DATABASE_URL")
+    if not engine_url:
+        raise RuntimeError("请设置 DATABASE_URL 环境变量或传入 --db")
     engine = create_engine(engine_url)
     df = pd.read_sql("SELECT * FROM books", engine)
     return df
