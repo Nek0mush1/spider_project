@@ -54,7 +54,8 @@ make detail     # 详情页评分补抓
 make export     # 数据库 → CSV
 make analyze    # 可视化图表
 make quality    # 数据质量报告
-make verify     # 全链路冒烟
+make verify-fast  # 快速验证（依赖数据库可连接）
+make verify-e2e   # 端到端验证（需数据库已有有效数据）
 ```
 
 ## 环境变量
@@ -110,7 +111,7 @@ name 非空率: 7694/8599 (89.5%)
 
 | 命令 | 说明 |
 |------|------|
-| `make verify-fast` | 单元测试 + 导出 + 分析冒烟（不依赖数据库） |
+| `make verify-fast` | fixture测试 + 导出 + 分析冒烟（依赖数据库可连接） |
 | `make verify-e2e` | verify-fast + 运行时断言（需数据库有数据） |
 | `make test-full` | 在独立 `_test` 库运行全部集成测试 |
 | `pytest -m "not integration"` | 只跑单元测试 |
