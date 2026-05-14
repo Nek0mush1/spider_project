@@ -1,11 +1,29 @@
 import os
 import scrapy
 from dotenv import load_dotenv
+from urllib.parse import urlparse, urlunparse
 from dangdang_scrapy.items import BookItem
 from dangdang_scrapy.parsers import parse_price, parse_rating_from_style, parse_review_count
 
 load_dotenv()
 USE_PW = os.environ.get("DANGDANG_USE_PLAYWRIGHT", "").lower() in ("1", "true", "yes")
+
+
+def _normalize_url(raw, response):
+    """规范化商品链接：丢弃跳转/广告链接，归一化 product.dangdang.com 链接"""
+    if not raw:
+        return None
+    url = ("http:" + raw) if raw.startswith("//") else response.urljoin(raw)
+    parsed = urlparse(url)
+    # 丢弃 tracking / jump / 广告链接
+    if "jump.php" in parsed.path or "a.dangdang.com" in parsed.hostname:
+        return None
+    # 只保留 product.dangdang.com 的商品详情页
+    if "product.dangdang.com" not in parsed.hostname:
+        return None
+    # 去掉追踪参数，保留纯净链接
+    clean = urlunparse((parsed.scheme, parsed.hostname, parsed.path, "", "", ""))
+    return clean
 
 
 def _request_meta():
@@ -77,8 +95,7 @@ class DangdangSpider(scrapy.Spider):
         for book in response.css("ul.bigimg li"):
             item = BookItem()
             item["name"] = book.css("a.pic::attr(title)").get() or ""
-            raw_url = book.css("a.pic::attr(href)").get()
-            item["detail_url"] = ("http:" + raw_url) if raw_url and raw_url.startswith("//") else (response.urljoin(raw_url) if raw_url else None)
+            item["detail_url"] = _normalize_url(book.css("a.pic::attr(href)").get(), response)
             item["author"] = book.css("p.search_book_author a[name='itemlist-author']::text").get("").strip()
             item["publisher"] = book.css("p.search_book_author a[name='P_cbs']::text").get("").strip()
             item["price"] = parse_price(book.css("span.search_now_price::text").get())
@@ -87,7 +104,7 @@ class DangdangSpider(scrapy.Spider):
             item["rating_people"] = parse_review_count(book.css("a.search_comment_num::text").get())
             item["sales"] = None
             item["category"] = category
-            if item["name"]:
+            if item["name"] and item["detail_url"]:
                 yield item
 
     def _parse_promo_items(self, response):
@@ -95,10 +112,8 @@ class DangdangSpider(scrapy.Spider):
         for book in response.css("div.cloth_good_sort li"):
             item = BookItem()
             item["name"] = book.css("a.name::text").get("").strip() or None
-            raw_url = book.css("a.pic::attr(href)").get()
-            item["detail_url"] = ("http:" + raw_url) if raw_url and raw_url.startswith("//") else (response.urljoin(raw_url) if raw_url else None)
+            item["detail_url"] = _normalize_url(book.css("a.pic::attr(href)").get(), response)
             item["author"] = ""
-            item["publisher"] = ""
             item["price"] = parse_price(book.css("span.d_price::text").get())
             orig_els = book.css("p.price_p i.m_price")
             item["original_price"] = parse_price(orig_els[-1].css("::text").get()) if len(orig_els) > 1 else None
@@ -106,11 +121,11 @@ class DangdangSpider(scrapy.Spider):
             item["rating_people"] = None
             item["sales"] = None
             item["category"] = category
-            if item["name"]:
+            if item["name"] and item["detail_url"]:
                 yield item
 
     def _follow_next(self, response, callback):
-        next_page = response.css("a:contains('\u4e0b\u4e00\u9875')::attr(href)").get()
+        next_page = response.css("li.next a::attr(href), a.next::attr(href)").get()
         if next_page and next_page not in ("javascript:;", "#"):
             next_url = response.urljoin(next_page)
             self.logger.info(f"Following next: {next_url}")

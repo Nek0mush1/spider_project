@@ -11,7 +11,7 @@ def parse_price(text):
 def parse_rating_from_style(style):
     if not style:
         return None
-    m = re.search(r"([\d.]+)%", str(style))
+    m = re.search(r"width\s*:\s*([\d.]+)%", str(style), re.IGNORECASE)
     return float(m.group(1)) if m else None
 
 
