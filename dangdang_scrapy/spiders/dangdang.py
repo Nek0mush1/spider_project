@@ -13,16 +13,19 @@ def _normalize_url(raw, response):
     """规范化商品链接：丢弃跳转/广告链接，归一化 product.dangdang.com 链接"""
     if not raw:
         return None
+    if raw.startswith(("javascript:", "mailto:", "#")):
+        return None
     url = ("http:" + raw) if raw.startswith("//") else response.urljoin(raw)
     parsed = urlparse(url)
-    # 丢弃 tracking / jump / 广告链接
-    if "jump.php" in parsed.path or "a.dangdang.com" in parsed.hostname:
-        return None
+    hostname = parsed.hostname or ""
     # 只保留 product.dangdang.com 的商品详情页
-    if "product.dangdang.com" not in parsed.hostname:
+    if "product.dangdang.com" not in hostname:
+        return None
+    # 丢弃 tracking / jump / 广告链接
+    if "jump.php" in parsed.path:
         return None
     # 去掉追踪参数，保留纯净链接
-    clean = urlunparse((parsed.scheme, parsed.hostname, parsed.path, "", "", ""))
+    clean = urlunparse((parsed.scheme, hostname, parsed.path, "", "", ""))
     return clean
 
 

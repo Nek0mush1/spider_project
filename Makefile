@@ -18,7 +18,7 @@ define wait_pg
 	@sleep 1
 endef
 
-.PHONY: setup crawl detail export analyze verify quality reset-db
+.PHONY: setup crawl detail export analyze verify quality test-full reset-db
 
 setup:
 	pip install -r requirements.txt
@@ -56,15 +56,22 @@ quality:
 	python quality_checks.py
 
 verify: quality
-	pytest tests/ -v --tb=short
+	pytest tests/ -v --tb=short -m "not integration"
 	@echo ""
 	@echo "=== 导出冒烟 ==="
 	python scripts/export_books.py
 	@echo ""
 	@echo "=== 分析冒烟 ==="
-	python analysis/visualize.py --csv data/books.csv 2>/dev/null || true
+	@if [ -f data/books.csv ]; then \
+		python analysis/visualize.py --csv data/books.csv; \
+	else \
+		echo "data/books.csv 不存在，跳过分析冒烟"; \
+	fi
 	@echo ""
 	@echo "所有验证通过！"
+
+test-full:
+	pytest tests/ -v --tb=short
 
 reset-db:
 	docker compose down -v

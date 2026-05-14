@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+markers = [
+    "integration: 依赖外部 PostgreSQL 的集成测试，默认不运行",
+]

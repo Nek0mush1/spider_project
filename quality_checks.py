@@ -56,6 +56,10 @@ def run():
     print("=" * 50)
     print("数据质量报告")
     print("=" * 50)
+    if total == 0:
+        print("  数据库为空，请先运行 make crawl 或 make import")
+        print("=" * 50)
+        return
     print(f"  采集总条数:              {total}")
     print(f"  唯一商品(detail_url):    {unique_urls}")
     print(f"  可用详情页(product URL): {product_urls} ({product_urls/total*100:.1f}%)")
@@ -64,8 +68,8 @@ def run():
     print(f"  价格可解析率:             {has_price}/{total} ({has_price/total*100:.1f}%)")
     print(f"  书名非空率:               {has_name}/{total} ({has_name/total*100:.1f}%)")
     print(f"  出版社数:                {publishers}")
-    print(f"  平均价格:                ¥{avg_price}")
-    print(f"  平均评分:                {avg_rating}/100")
+    print(f"  平均价格:                ¥{avg_price}" if avg_price else "  平均价格:                N/A")
+    print(f"  平均评分:                {avg_rating}/100" if avg_rating else "  平均评分:                N/A")
     print("=" * 50)
 
 

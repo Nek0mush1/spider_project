@@ -1,6 +1,8 @@
 import pytest, os, sys, pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+pytestmark = [pytest.mark.integration]
+
 os.environ["DATABASE_URL"] = "postgresql+psycopg2://dangdang:dangdang@localhost:5433/dangdang_books"
 from dangdang_scrapy.db import get_engine, init_db, upsert_books
 from sqlalchemy import text
