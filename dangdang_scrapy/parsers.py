@@ -1,30 +1,41 @@
 import re
+from typing import Optional, Tuple
+
+PRICE_RE = re.compile(r"\d+\.?\d*")
+INT_RE = re.compile(r"\d+")
+RATING_STYLE_RE = re.compile(r"width\s*:\s*([\d.]+)%", re.IGNORECASE)
+DETAIL_RATING_RE = re.compile(r'<span class="star"[^>]*style="[^"]*width:\s*([\d.]+)%')
+DETAIL_PEOPLE_RE = re.compile(r'id="comm_num_down"[^>]*>(\d+)')
 
 
-def parse_price(text):
+def parse_price(text: object) -> Optional[float]:
     if not text:
         return None
-    nums = re.findall(r"\d+\.?\d*", str(text))
+    nums = PRICE_RE.findall(str(text))
     return float(nums[0]) if nums else None
 
 
-def parse_rating_from_style(style):
+def parse_int(text: object) -> Optional[int]:
+    if not text:
+        return None
+    nums = INT_RE.findall(str(text).replace(",", ""))
+    return int(nums[0]) if nums else None
+
+
+def parse_rating_from_style(style: object) -> Optional[float]:
     if not style:
         return None
-    m = re.search(r"width\s*:\s*([\d.]+)%", str(style), re.IGNORECASE)
+    m = RATING_STYLE_RE.search(str(style))
     return float(m.group(1)) if m else None
 
 
-def parse_review_count(text):
-    if not text:
-        return None
-    m = re.search(r"(\d+)", str(text))
-    return int(m.group(1)) if m else None
+def parse_review_count(text: object) -> Optional[int]:
+    return parse_int(text)
 
 
-def parse_detail_rating(html):
-    m = re.search(r'<span class="star"[^>]*style="[^"]*width:\s*([\d.]+)%', html)
+def parse_detail_rating(html: str) -> Tuple[Optional[float], Optional[int]]:
+    m = DETAIL_RATING_RE.search(html)
     rating = float(m.group(1)) if m else None
-    m = re.search(r'id="comm_num_down"[^>]*>(\d+)', html)
+    m = DETAIL_PEOPLE_RE.search(html)
     people = int(m.group(1)) if m else None
     return rating, people

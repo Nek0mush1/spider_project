@@ -82,8 +82,6 @@ test-full:
 	@echo "=== 准备测试库 ==="
 	@PGPASSWORD=$(PG_PASS) docker compose exec -T postgres psql -U $(PG_USER) -c \
 		"CREATE DATABASE dangdang_books_test WITH TEMPLATE template0 ENCODING 'UTF8'" 2>/dev/null || true
-	@PGPASSWORD=$(PG_PASS) docker compose exec -T postgres psql -U $(PG_USER) -d dangdang_books_test -c \
-		"CREATE EXTENSION IF NOT EXISTS pgcrypto" 2>/dev/null || true
 	@echo "=== 运行集成测试 (TEST_DATABASE_URL=dangdang_books_test) ==="
 	TEST_DATABASE_URL=postgresql+psycopg2://$(PG_USER):$(PG_PASS)@localhost:5433/dangdang_books_test \
 		pytest tests/ -v --tb=short

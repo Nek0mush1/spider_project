@@ -24,23 +24,26 @@ class DangdangDetailSpider(scrapy.Spider):
         super().__init__(*args, **kwargs)
         self.engine = get_engine()
         self.updated = 0
+        self.skipped = 0
+        self.http_errors = 0
+        self.no_rating = 0
         self._batch = []
 
     def start_requests(self):
         urls = self._fetch_pending()
-        self.logger.info(f"Fetched {len(urls)} URLs to scrape for ratings")
+        self.logger.info(f"Fetched {len(urls)} URLs")
         for bid, detail_url in urls:
             meta = {"id": bid, "detail_url": detail_url}
             if USE_PW:
                 from scrapy_playwright.page import PageMethod
                 meta["playwright"] = True
                 meta["playwright_page_methods"] = [
-                    PageMethod("wait_for_timeout", 2000),
+                    PageMethod("wait_for_selector", "#comm_num_down, span.star", timeout=5000),
+                    PageMethod("wait_for_timeout", 500),
                 ]
-            yield scrapy.Request(url=detail_url, callback=self.parse, meta=meta)
+            yield scrapy.Request(url=detail_url, callback=self.parse, meta=meta, errback=self.on_error)
 
     def _fetch_pending(self):
-        # 同时补 rating 和 rating_people 缺失的记录
         sql = """SELECT id, detail_url FROM books
                  WHERE detail_url LIKE '%product.dangdang.com%'
                    AND (rating IS NULL OR rating = 0
@@ -50,14 +53,18 @@ class DangdangDetailSpider(scrapy.Spider):
             return [(row[0], row[1]) for row in conn.execute(text(sql))]
 
     def parse(self, response):
-        bid = response.meta.get("id")
-        detail_url = response.meta.get("detail_url")
-        if not detail_url:
-            return
+        bid = response.meta["id"]
         rating, people = parse_detail_rating(response.text)
+        if rating is None and people is None:
+            self.no_rating += 1
         self._batch.append((bid, rating, people))
         if len(self._batch) >= 100:
             self._flush()
+
+    def on_error(self, failure):
+        self.http_errors += 1
+        url = failure.request.meta.get("detail_url", "?")
+        self.logger.debug(f"Failed: {url}")
 
     def _flush(self):
         if not self._batch:
@@ -73,4 +80,7 @@ class DangdangDetailSpider(scrapy.Spider):
 
     def closed(self, reason):
         self._flush()
-        self.logger.info(f"Done: {self.updated} updated")
+        self.logger.info(
+            f"Done: {self.updated} updated, {self.http_errors} http errors, "
+            f"{self.no_rating} no-rating pages"
+        )
