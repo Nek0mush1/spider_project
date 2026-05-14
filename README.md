@@ -106,6 +106,44 @@ make verify     # 全链路冒烟
 name 非空率: 7694/8599 (89.5%)
 ```
 
+## 验证命令
+
+| 命令 | 说明 |
+|------|------|
+| `make verify-fast` | 单元测试 + 导出 + 分析冒烟（不依赖数据库） |
+| `make verify-e2e` | verify-fast + 运行时断言（需数据库有数据） |
+| `make test-full` | 在独立 `_test` 库运行全部集成测试 |
+| `pytest -m "not integration"` | 只跑单元测试 |
+
+## 开发者指南
+
+### 新增解析函数
+1. 在 `parsers.py` 实现，补类型标注
+2. 在 `tests/test_parsers.py` 补测试（正常值 / 空值 / 异常值）
+3. 在 `pipelines.py` 或 `spiders/` 中复用
+
+### 新增爬虫 / Fixture / 集成测试
+1. 爬虫放在 `spiders/`，数据库测试打 `@pytest.mark.integration`
+2. 本地 HTML fixture 放在 `tests/fixtures/`，测试不依赖外网
+3. 集成测试使用 `TEST_DATABASE_URL`（必须以 `_test` 结尾），与生产库隔离
+
+### 数据语义
+| 字段 | 说明 |
+|------|------|
+| `rating` | 百分比 0-100，90 = 4.5 星 |
+| `rating_people` | 评论数，可为空 |
+| `sales` | 预留字段，当前未采集 |
+| `price` | 当前售价，可为空 |
+
+### 数据流
+```
+当当网 → Scrapy spider → BookCleaningPipeline → DatabasePipeline(upsert) → PostgreSQL
+                                                                              ↓
+                                                                       CSV(显式导出)
+                                                                              ↓
+                                                                   matplotlib(可视化)
+```
+
 ## 技术栈
 
 Python 3.14 · Scrapy 2.15 · Playwright · PostgreSQL 16 · Docker · pandas · matplotlib
