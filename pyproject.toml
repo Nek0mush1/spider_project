@@ -1,4 +1,5 @@
 [tool.pytest.ini_options]
 markers = [
-    "integration: 依赖外部 PostgreSQL 的集成测试，默认不运行",
+    "integration: 依赖外部 PostgreSQL 的集成测试，默认不运行。需设置 TEST_DATABASE_URL 指向以 _test 结尾的库",
 ]
+testpaths = ["tests"]

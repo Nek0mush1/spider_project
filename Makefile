@@ -18,7 +18,7 @@ define wait_pg
 	@sleep 1
 endef
 
-.PHONY: setup crawl detail export analyze verify quality test-full reset-db
+.PHONY: setup crawl detail export analyze verify-fast verify-e2e quality test-full reset-db
 
 setup:
 	pip install -r requirements.txt
@@ -29,13 +29,14 @@ setup:
 	python -c "from dangdang_scrapy.db import init_db; init_db()"
 	@echo ""
 	@echo "环境就绪！"
-	@echo "  make crawl    列表抓取"
-	@echo "  make detail   评分补抓"
-	@echo "  make import   导入旧CSV (可选)"
-	@echo "  make export   导出CSV"
-	@echo "  make analyze  可视化"
-	@echo "  make quality  数据质量报告"
-	@echo "  make verify   全链路验证"
+	@echo "  make crawl      列表抓取"
+	@echo "  make detail     评分补抓"
+	@echo "  make import     导入旧CSV (可选)"
+	@echo "  make export     导出CSV"
+	@echo "  make analyze    可视化"
+	@echo "  make quality    数据质量报告"
+	@echo "  make verify-fast 快速验证 (fixture测试+冒烟)"
+	@echo "  make verify-e2e 端到端验证 (含运行时断言)"
 
 import: data/books.csv
 	python scripts/import_books.py
@@ -55,7 +56,7 @@ analyze:
 quality:
 	python quality_checks.py
 
-verify: quality
+verify-fast: quality
 	pytest tests/ -v --tb=short -m "not integration"
 	@echo ""
 	@echo "=== 导出冒烟 ==="
@@ -68,10 +69,24 @@ verify: quality
 		echo "data/books.csv 不存在，跳过分析冒烟"; \
 	fi
 	@echo ""
-	@echo "所有验证通过！"
+	@echo "快速验证通过！"
+
+verify-e2e: verify-fast
+	@echo ""
+	@echo "=== 运行时断言 ==="
+	python scripts/assert_runtime_state.py
+	@echo ""
+	@echo "端到端验证通过！"
 
 test-full:
-	pytest tests/ -v --tb=short
+	@echo "=== 准备测试库 ==="
+	@PGPASSWORD=$(PG_PASS) docker compose exec -T postgres psql -U $(PG_USER) -c \
+		"CREATE DATABASE dangdang_books_test WITH TEMPLATE template0 ENCODING 'UTF8'" 2>/dev/null || true
+	@PGPASSWORD=$(PG_PASS) docker compose exec -T postgres psql -U $(PG_USER) -d dangdang_books_test -c \
+		"CREATE EXTENSION IF NOT EXISTS pgcrypto" 2>/dev/null || true
+	@echo "=== 运行集成测试 (TEST_DATABASE_URL=dangdang_books_test) ==="
+	TEST_DATABASE_URL=postgresql+psycopg2://$(PG_USER):$(PG_PASS)@localhost:5433/dangdang_books_test \
+		pytest tests/ -v --tb=short
 
 reset-db:
 	docker compose down -v
