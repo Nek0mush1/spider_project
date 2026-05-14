@@ -1,8 +1,10 @@
 import os
 import scrapy
+from dotenv import load_dotenv
 from dangdang_scrapy.items import BookItem
 from dangdang_scrapy.parsers import parse_price, parse_rating_from_style, parse_review_count
 
+load_dotenv()
 USE_PW = os.environ.get("DANGDANG_USE_PLAYWRIGHT", "").lower() in ("1", "true", "yes")
 
 

@@ -1,10 +1,11 @@
 import os
 import scrapy
-from scrapy_playwright.page import PageMethod
+from dotenv import load_dotenv
 from dangdang_scrapy.db import get_engine
 from dangdang_scrapy.parsers import parse_detail_rating
 from sqlalchemy import text
 
+load_dotenv()
 USE_PW = os.environ.get("DANGDANG_USE_PLAYWRIGHT", "").lower() in ("1", "true", "yes")
 
 
@@ -23,7 +24,6 @@ class DangdangDetailSpider(scrapy.Spider):
         super().__init__(*args, **kwargs)
         self.engine = get_engine()
         self.updated = 0
-        self.skipped = 0
         self._batch = []
 
     def start_requests(self):
@@ -32,6 +32,7 @@ class DangdangDetailSpider(scrapy.Spider):
         for bid, detail_url in urls:
             meta = {"id": bid, "detail_url": detail_url}
             if USE_PW:
+                from scrapy_playwright.page import PageMethod
                 meta["playwright"] = True
                 meta["playwright_page_methods"] = [
                     PageMethod("wait_for_timeout", 2000),
@@ -39,9 +40,11 @@ class DangdangDetailSpider(scrapy.Spider):
             yield scrapy.Request(url=detail_url, callback=self.parse, meta=meta)
 
     def _fetch_pending(self):
+        # 同时补 rating 和 rating_people 缺失的记录
         sql = """SELECT id, detail_url FROM books
                  WHERE detail_url LIKE '%product.dangdang.com%'
-                   AND (rating IS NULL OR rating = 0)
+                   AND (rating IS NULL OR rating = 0
+                        OR rating_people IS NULL OR rating_people = 0)
                  ORDER BY id"""
         with self.engine.connect() as conn:
             return [(row[0], row[1]) for row in conn.execute(text(sql))]
@@ -52,7 +55,7 @@ class DangdangDetailSpider(scrapy.Spider):
         if not detail_url:
             return
         rating, people = parse_detail_rating(response.text)
-        self._batch.append((bid, detail_url, rating, people))
+        self._batch.append((bid, rating, people))
         if len(self._batch) >= 100:
             self._flush()
 
@@ -60,7 +63,7 @@ class DangdangDetailSpider(scrapy.Spider):
         if not self._batch:
             return
         with self.engine.begin() as conn:
-            for bid, url, rating, people in self._batch:
+            for bid, rating, people in self._batch:
                 conn.execute(
                     text("UPDATE books SET rating=:r, rating_people=:p WHERE id=:id"),
                     {"r": rating, "p": people, "id": bid},

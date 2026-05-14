@@ -1,5 +1,8 @@
-import os
+import os, math
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
+
+load_dotenv()
 
 _engine = None
 
@@ -7,10 +10,9 @@ _engine = None
 def get_engine():
     global _engine
     if _engine is None:
-        url = os.environ.get(
-            "DATABASE_URL",
-            "postgresql+psycopg2://dangdang:dangdang@localhost:5433/dangdang_books",
-        )
+        url = os.environ.get("DATABASE_URL")
+        if not url:
+            raise RuntimeError("DATABASE_URL 未设置。请复制 .env.example 为 .env 并填入配置")
         _engine = create_engine(url, connect_args={"connect_timeout": 5})
     return _engine
 
@@ -27,8 +29,8 @@ def init_db():
                 price DOUBLE PRECISION,
                 original_price DOUBLE PRECISION,
                 rating DOUBLE PRECISION,
-    rating_people BIGINT,
-    sales BIGINT,
+                rating_people BIGINT,
+                sales BIGINT,
                 detail_url VARCHAR(1000),
                 category VARCHAR(200),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -41,7 +43,6 @@ def init_db():
 
 
 def upsert_books(df, batch_size=100):
-    import math
     engine = get_engine()
     stmt = text("""
         INSERT INTO books (name, author, publisher, price, original_price,
@@ -56,7 +57,8 @@ def upsert_books(df, batch_size=100):
             rows = batch.to_dict(orient="records")
             for row in rows:
                 for k in ("rating_people", "sales"):
-                    if k in row and (row[k] is None or (isinstance(row[k], float) and math.isnan(row[k]))):
+                    v = row.get(k)
+                    if v is None or (isinstance(v, float) and math.isnan(v)):
                         row[k] = None
-                conn.execute(stmt, row)
+            conn.execute(stmt, rows)
     return len(df)
