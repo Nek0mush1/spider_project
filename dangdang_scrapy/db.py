@@ -7,14 +7,21 @@ load_dotenv()
 _engine = None
 
 
-def get_engine():
+def get_engine(database_url=None):
     global _engine
     if _engine is None:
-        url = os.environ.get("DATABASE_URL")
+        url = database_url or os.environ.get("DATABASE_URL")
         if not url:
             raise RuntimeError("DATABASE_URL 未设置。请复制 .env.example 为 .env 并填入配置")
         _engine = create_engine(url, connect_args={"connect_timeout": 5})
     return _engine
+
+
+def reset_engine():
+    global _engine
+    if _engine is not None:
+        _engine.dispose()
+    _engine = None
 
 
 def init_db():
