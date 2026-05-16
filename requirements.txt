@@ -1,0 +1,8 @@
+scrapy>=2.10
+scrapy-playwright
+playwright
+pandas
+psycopg2-binary
+SQLAlchemy
+python-dotenv
+pytest
