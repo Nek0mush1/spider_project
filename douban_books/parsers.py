@@ -1,6 +1,7 @@
 """Douban book page parsers using lxml.html and Scrapy selectors."""
 
 import re
+from collections import Counter
 from lxml import html as lxml_html
 
 
@@ -26,6 +27,22 @@ def _css_text(tree, selector, default=None):
     if not sel:
         return default
     return _strip(sel[0].text_content())
+
+
+def _extract_digits(value, default=0):
+    if not value:
+        return default
+    digits = re.sub(r"\D", "", value)
+    return int(digits) if digits else default
+
+
+def _extract_star_from_class(value):
+    if not value:
+        return None
+    match = re.search(r"allstar(\d{2})", value)
+    if not match:
+        return None
+    return int(match.group(1)) // 10
 
 
 def _clean_author_prefix(value):
@@ -305,4 +322,126 @@ def parse_detail(response):
         'price': price,
         'rating': rating,
         'votes': votes,
+    }
+
+
+def parse_review_entries(response, book_url, limit=20):
+    tree = lxml_html.fromstring(response.text)
+    entries = []
+    rows = tree.cssselect(".review-list .review-item")
+    for row in rows[:limit]:
+        review_url = _css_one(row, "h2 a").get("href") if _css_one(row, "h2 a") is not None else None
+        rating_el = _css_one(row, ".main-hd .main-title-rating")
+        useful_text = _css_text(row, ".action .action-btn.up", default="0")
+        useless_text = _css_text(row, ".action .action-btn.down", default="0")
+        useful_count = _extract_digits(useful_text)
+        useless_count = _extract_digits(useless_text)
+        total_votes = useful_count + useless_count
+        entries.append({
+            "book_url": book_url,
+            "review_url": _strip(review_url),
+            "title": _css_text(row, "h2 a"),
+            "content": _css_text(row, ".short-content"),
+            "rating": _extract_star_from_class(rating_el.get("class", "") if rating_el is not None else None),
+            "useful_count": useful_count,
+            "useless_count": useless_count,
+            "useful_ratio": round(useful_count / total_votes, 4) if total_votes else None,
+            "replies_count": _extract_digits(_css_text(row, ".reply-btn", default="0")),
+            "reviewer_name": _css_text(row, ".main-hd .name"),
+            "reviewer_url": _strip(_css_one(row, ".main-hd .name").get("href")) if _css_one(row, ".main-hd .name") is not None else None,
+            "published_at": _css_text(row, ".main-hd .main-meta"),
+        })
+
+    next_href = _css_one(tree, ".paginator .next a")
+    next_url = None
+    if next_href is not None:
+        next_url = response.urljoin(next_href.get("href"))
+    return entries, next_url
+
+
+def parse_official_rating_distribution(response):
+    tree = lxml_html.fromstring(response.text)
+    values = [_strip(node.text_content()) for node in tree.cssselect("#interest_sectl .rating_per")]
+    cleaned = []
+    for value in values[:5]:
+        if value is None:
+            cleaned.append(0.0)
+            continue
+        try:
+            cleaned.append(float(value.replace("%", "")))
+        except ValueError:
+            cleaned.append(0.0)
+    while len(cleaned) < 5:
+        cleaned.append(0.0)
+    return {
+        "star_5_pct": cleaned[0],
+        "star_4_pct": cleaned[1],
+        "star_3_pct": cleaned[2],
+        "star_2_pct": cleaned[3],
+        "star_1_pct": cleaned[4],
+    }
+
+
+def parse_reading_state(response):
+    tree = lxml_html.fromstring(response.text)
+    collector = _css_one(tree, "#collector")
+    texts = collector.text_content().splitlines() if collector is not None else []
+    payload = {"want_to_read": 0, "reading": 0, "read": 0}
+    for text in texts:
+        stripped = _strip(text)
+        if not stripped:
+            continue
+        if "想读" in stripped:
+            payload["want_to_read"] = _extract_digits(stripped)
+        elif "在读" in stripped:
+            payload["reading"] = _extract_digits(stripped)
+        elif "读过" in stripped:
+            payload["read"] = _extract_digits(stripped)
+    return payload
+
+
+def build_derived_rating_distribution(reviews):
+    counter = Counter()
+    for review in reviews:
+        rating = review.get("rating")
+        if rating in (1, 2, 3, 4, 5):
+            counter[rating] += 1
+    sample_size = sum(counter.values())
+
+    def pct(star):
+        if sample_size == 0:
+            return 0.0
+        return round(counter[star] * 100.0 / sample_size, 4)
+
+    return {
+        "sample_size": sample_size,
+        "star_5_count": counter[5],
+        "star_4_count": counter[4],
+        "star_3_count": counter[3],
+        "star_2_count": counter[2],
+        "star_1_count": counter[1],
+        "star_5_pct": pct(5),
+        "star_4_pct": pct(4),
+        "star_3_pct": pct(3),
+        "star_2_pct": pct(2),
+        "star_1_pct": pct(1),
+    }
+
+
+def parse_user_profile(response):
+    tree = lxml_html.fromstring(response.text)
+    links = tree.cssselect(".rev-link a")
+    following = 0
+    followers = 0
+    for link in links:
+        text = _strip(link.text_content()) or ""
+        if "关注" in text and "被关注" not in text:
+            following = _extract_digits(text)
+        elif "被关注" in text:
+            followers = _extract_digits(text)
+    return {
+        "reviewer_url": response.url,
+        "display_name": _css_text(tree, ".user-info h1"),
+        "following_count": following,
+        "followers_count": followers,
     }

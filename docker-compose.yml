@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: douban-pg
     environment:
       POSTGRES_USER: douban
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-douban}
@@ -16,6 +15,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  xvfb:
+    image: jlesage/baseimage-gui:alpine-3.22-v4
+    environment:
+      DISPLAY_WIDTH: 1440
+      DISPLAY_HEIGHT: 1024
+      KEEP_APP_RUNNING: 1
+    ports:
+      - "5800:5800"
 
 volumes:
   pgdata_douban:

@@ -10,8 +10,8 @@ NEWSPIDER_MODULE = "douban_books.spiders"
 # robots.txt 遵守（豆瓣专用，与dangdang_scrapy不同）
 ROBOTSTXT_OBEY = True
 
-# Cookie禁用（豆瓣使用Cookie绑定反爬，与dangdang_scrapy不同）
-COOKIES_ENABLED = False
+# 匿名会话仍允许 Scrapy 管理 cookiejar
+COOKIES_ENABLED = True
 
 # 爬取礼貌性（豆瓣比当当更严格）
 DOWNLOAD_DELAY = 3.0
@@ -41,13 +41,16 @@ DEFAULT_REQUEST_HEADERS = {
 
 # 中间件
 DOWNLOADER_MIDDLEWARES = {
+    "douban_books.middlewares.ProxyRotationMiddleware": 300,
     "douban_books.middlewares.RandomUserAgentMiddleware": 400,
+    "douban_books.middlewares.RandomizedRequestMiddleware": 450,
+    "douban_books.middlewares.AnonymousCookieSessionMiddleware": 500,
 }
 
 # 管道（两阶段：清洗 → 数据库）
 ITEM_PIPELINES = {
     "douban_books.pipelines.BookCleaningPipeline": 200,
-    "douban_books.pipelines.DatabasePipeline": 300,
+    "douban_books.pipelines.AdvancedItemPipeline": 300,
 }
 
 # Playwright双模式渲染（通过环境变量切换，与dangdang_scrapy模式一致）
@@ -58,3 +61,8 @@ if USE_PLAYWRIGHT:
         "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
     }
     TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
+    PLAYWRIGHT_BROWSER_TYPE = "chromium"
+    PLAYWRIGHT_LAUNCH_OPTIONS = {
+        "headless": os.environ.get("DOUBAN_PLAYWRIGHT_HEADLESS", "false").lower() in ("1", "true"),
+    }
+    PLAYWRIGHT_DEFAULT_NAVIGATION_TIMEOUT = 45_000

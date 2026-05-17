@@ -1,6 +1,6 @@
 # 豆瓣读书 TOP250 元数据爬虫
 
-基于 Scrapy 的豆瓣读书 TOP250 元数据采集项目，支持列表页抓取、详情页补抓、数据清洗、入库和 CSV 导出。默认走原生 HTTP，必要时可切换 Playwright。
+基于 Scrapy 的豆瓣读书 TOP250 元数据采集项目，支持列表页抓取、详情页补抓、书评 UGC、评分分布、阅读状态、用户社交数据、数据清洗、入库和 CSV 导出。默认走原生 HTTP，必要时可切换 Playwright。
 
 ## 技术栈
 
@@ -109,7 +109,13 @@ TEST_DATABASE_URL=postgresql+psycopg2://douban:douban@localhost:5434/douban_book
 - `make setup`，检查 conda 环境并启动 PostgreSQL
 - `make crawl`，抓取 TOP250 列表页
 - `make detail`，补抓详情页
-- `make export`，导出 CSV
+- `make reviews`，抓取热门书评
+- `make ratings`，抓取官方评分分布与阅读状态
+- `make social`，抓取书评作者社交计数
+- `make full`，串行跑完整高级链路
+- `make export`，导出书籍 CSV
+- `make export-advanced`，导出评论/评分/用户 CSV
 - `make quality`，执行数据质量检查
+- `make verify-advanced`，运行非集成测试和进阶质量检查
 - `make verify-fast`，单元测试 + 导出 + 质量检查
 - `make test-full`，使用 `TEST_DATABASE_URL` 跑完整集成测试
