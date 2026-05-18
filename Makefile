@@ -7,6 +7,13 @@ PG_PASS   ?= dangdang
 PG_DB     ?= $(shell grep ^PG_DB .env 2>/dev/null | cut -d= -f2-)
 PG_DB     ?= dangdang_books
 
+# Conda 环境配置
+CONDA_ENV  ?= dangdang_scrapy
+CONDA_BASE := $(shell conda info --base 2>/dev/null || echo "$(HOME)/miniconda3")
+PYTHON      = $(CONDA_BASE)/envs/$(CONDA_ENV)/bin/python
+PIP         = $(CONDA_BASE)/envs/$(CONDA_ENV)/bin/pip
+CONDA_RUN   = . "$(CONDA_BASE)/etc/profile.d/conda.sh" && conda activate $(CONDA_ENV)
+
 define wait_pg
 	@echo "等待 PG 就绪..."
 	@for i in 1 2 3 4 5 6 7 8; do \
@@ -21,12 +28,12 @@ endef
 .PHONY: setup crawl detail export analyze verify-fast verify-e2e quality test-full reset-db
 
 setup:
-	pip install -r requirements.txt
-	playwright install chromium 2>/dev/null || true
+	$(PIP) install -r requirements.txt
+	$(CONDA_RUN) && playwright install chromium 2>/dev/null || true
 	[ -f .env ] || cp .env.example .env
 	docker compose up -d
 	$(call wait_pg)
-	python -c "from dangdang_scrapy.db import init_db; init_db()"
+	$(PYTHON) -c "from dangdang_scrapy.db import init_db; init_db()"
 	@echo ""
 	@echo "环境就绪！"
 	@echo "  make crawl      列表抓取"
@@ -39,32 +46,32 @@ setup:
 	@echo "  make verify-e2e 端到端验证 (含运行时断言)"
 
 import: data/books.csv
-	python scripts/import_books.py
+	$(PYTHON) scripts/import_books.py
 
 crawl:
-	python -m scrapy crawl dangdang -s JOBDIR=jobs/crawl
+	$(PYTHON) -m scrapy crawl dangdang -s JOBDIR=jobs/crawl
 
 detail:
-	python -m scrapy crawl dangdang_detail -s JOBDIR=jobs/detail
+	$(PYTHON) -m scrapy crawl dangdang_detail -s JOBDIR=jobs/detail
 
 export:
-	python scripts/export_books.py
+	$(PYTHON) scripts/export_books.py
 
 analyze:
-	python analysis/visualize.py
+	$(PYTHON) analysis/visualize.py
 
 quality:
-	python quality_checks.py
+	$(PYTHON) quality_checks.py
 
 verify-fast: quality
-	pytest tests/ -v --tb=short -m "not integration"
+	$(PYTHON) -m pytest tests/ -v --tb=short -m "not integration"
 	@echo ""
 	@echo "=== 导出冒烟 ==="
-	python scripts/export_books.py
+	$(PYTHON) scripts/export_books.py
 	@echo ""
 	@echo "=== 分析冒烟 ==="
 	@if [ -f data/books.csv ]; then \
-		python analysis/visualize.py --csv data/books.csv; \
+		$(PYTHON) analysis/visualize.py --csv data/books.csv; \
 	else \
 		echo "data/books.csv 不存在，跳过分析冒烟"; \
 	fi
@@ -74,7 +81,7 @@ verify-fast: quality
 verify-e2e: verify-fast
 	@echo ""
 	@echo "=== 运行时断言 ==="
-	python scripts/assert_runtime_state.py
+	$(PYTHON) scripts/assert_runtime_state.py
 	@echo ""
 	@echo "端到端验证通过！"
 
@@ -84,13 +91,13 @@ test-full:
 		"CREATE DATABASE dangdang_books_test WITH TEMPLATE template0 ENCODING 'UTF8'" 2>/dev/null || true
 	@echo "=== 运行集成测试 (TEST_DATABASE_URL=dangdang_books_test) ==="
 	TEST_DATABASE_URL=postgresql+psycopg2://$(PG_USER):$(PG_PASS)@localhost:5433/dangdang_books_test \
-		pytest tests/ -v --tb=short
+		$(PYTHON) -m pytest tests/ -v --tb=short
 
 reset-db:
 	docker compose down -v
 	docker compose up -d
 	$(call wait_pg)
-	python -c "from dangdang_scrapy.db import init_db; init_db()"
+	$(PYTHON) -c "from dangdang_scrapy.db import init_db; init_db()"
 
 psql:
 	docker compose exec postgres psql -U $(PG_USER) -d $(PG_DB)

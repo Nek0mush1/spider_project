@@ -7,7 +7,7 @@
 ```
 dangdang_scrapy/
 ├── docker-compose.yml       # PostgreSQL 容器
-├── Makefile                  # 一键命令入口
+├── Makefile                  # 一键命令入口 (自动识别 Conda 环境)
 ├── requirements.txt          # Python 依赖
 ├── .env.example              # 环境变量模板
 ├── README.md
@@ -38,6 +38,20 @@ dangdang_scrapy/
 ```
 
 ## 快速开始
+
+### 前置：Conda 环境
+
+项目依赖统一通过 Conda 环境管理（`dangdang_scrapy`），所有 `make` 命令自动使用该环境。
+
+```bash
+# 创建 Conda 环境（首次）
+conda create -n dangdang_scrapy python=3.13 -y
+
+# 激活环境后手动操作，或直接用 make（自动识别环境）
+conda activate dangdang_scrapy
+```
+
+### 一键初始化
 
 ```bash
 # 1. 环境变量
@@ -147,4 +161,4 @@ name 非空率: 7694/8599 (89.5%)
 
 ## 技术栈
 
-Python 3.14 · Scrapy 2.15 · Playwright · PostgreSQL 16 · Docker · pandas · matplotlib
+Python 3.13 · Scrapy 2.15 · Playwright · PostgreSQL 16 · Docker · Conda · pandas · matplotlib
