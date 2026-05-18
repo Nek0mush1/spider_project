@@ -71,3 +71,13 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_reviewer_url
 ON user_profiles(reviewer_url);
+
+CREATE TABLE IF NOT EXISTS skipped_reviewer_urls (
+    id SERIAL PRIMARY KEY,
+    reviewer_url VARCHAR(500) NOT NULL,
+    reason VARCHAR(64),
+    crawled_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_skipped_reviewer_urls_reviewer_url
+ON skipped_reviewer_urls(reviewer_url);

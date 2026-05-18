@@ -69,6 +69,12 @@ USER_PROFILE_COLUMNS = [
     "crawled_at",
 ]
 
+SKIPPED_REVIEWER_COLUMNS = [
+    "reviewer_url",
+    "reason",
+    "crawled_at",
+]
+
 
 def get_engine(database_url=None):
     global _engine, _engine_url
@@ -189,6 +195,19 @@ def init_db():
         conn.execute(text("""
             CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_reviewer_url
             ON user_profiles(reviewer_url)
+        """))
+
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS skipped_reviewer_urls (
+                id SERIAL PRIMARY KEY,
+                reviewer_url VARCHAR(500) NOT NULL,
+                reason VARCHAR(64),
+                crawled_at TIMESTAMP DEFAULT NOW()
+            )
+        """))
+        conn.execute(text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_skipped_reviewer_urls_reviewer_url
+            ON skipped_reviewer_urls(reviewer_url)
         """))
 
 
@@ -323,6 +342,23 @@ def upsert_user_profiles(df, batch_size=100):
     )
 
 
+def upsert_skipped_reviewers(df, batch_size=100):
+    if df.empty:
+        return 0
+    normalized = df.copy()
+    for column in SKIPPED_REVIEWER_COLUMNS:
+        if column not in normalized.columns:
+            normalized[column] = None
+    normalized = normalized[SKIPPED_REVIEWER_COLUMNS]
+    return _upsert_dataframe(
+        "skipped_reviewer_urls",
+        ["reviewer_url"],
+        [column for column in SKIPPED_REVIEWER_COLUMNS if column != "reviewer_url"],
+        normalized,
+        batch_size=batch_size,
+    )
+
+
 def fetch_book_urls():
     engine = get_engine()
     with engine.connect() as conn:
@@ -374,20 +410,26 @@ def fetch_reviews_for_book(book_url):
     return [dict(row) for row in rows]
 
 
-def fetch_reviewer_urls(limit=None):
+def fetch_reviewer_urls(limit=None, min_review_count=1):
     engine = get_engine()
     sql = """
-        SELECT DISTINCT reviewer_url
+        SELECT reviewer_url
         FROM reviews
         WHERE reviewer_url IS NOT NULL
           AND reviewer_url <> ''
+          AND reviewer_url LIKE '%/people/%'
           AND reviewer_url NOT IN (
             SELECT reviewer_url FROM user_profiles WHERE reviewer_url IS NOT NULL
           )
-        ORDER BY reviewer_url
+          AND reviewer_url NOT IN (
+            SELECT reviewer_url FROM skipped_reviewer_urls WHERE reviewer_url IS NOT NULL
+          )
+        GROUP BY reviewer_url
+        HAVING COUNT(*) >= :min_review_count
+        ORDER BY COUNT(*) DESC, reviewer_url
     """
     if limit:
         sql += f" LIMIT {int(limit)}"
     with engine.connect() as conn:
-        rows = conn.execute(text(sql)).fetchall()
+        rows = conn.execute(text(sql), {"min_review_count": min_review_count}).fetchall()
     return [row[0] for row in rows]

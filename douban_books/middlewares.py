@@ -65,6 +65,8 @@ class ProxyRotationMiddleware:
     def __init__(self):
         pool = os.environ.get("DOUBAN_PROXY_POOL", "").strip()
         single = os.environ.get("DOUBAN_PROXY_URL", "").strip()
+        if single.startswith("http://"):
+            single = "https://" + single[len("http://") :]
         proxies = [p.strip() for p in pool.split(",") if p.strip()]
         if single:
             proxies.append(single)

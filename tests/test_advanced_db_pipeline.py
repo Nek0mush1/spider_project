@@ -5,9 +5,11 @@ import pytest
 from sqlalchemy import text
 
 from douban_books.db import (
+    fetch_reviewer_urls,
     get_engine,
     init_db,
     reset_engine,
+    upsert_skipped_reviewers,
     upsert_rating_distributions,
     upsert_reviews,
     upsert_user_profiles,
@@ -121,3 +123,69 @@ def test_upsert_reviews_and_users_and_ratings():
     assert review_count == 1
     assert rating_count == 1
     assert user_count == 1
+
+
+@pytest.mark.integration
+def test_fetch_reviewer_urls_prefers_high_frequency_and_filters_min_count():
+    reviews = pd.DataFrame(
+        [
+            {
+                "book_url": "https://book.douban.com/subject/1/",
+                "review_url": "https://book.douban.com/review/1/",
+                "reviewer_url": "https://www.douban.com/people/reviewer-b/",
+            },
+            {
+                "book_url": "https://book.douban.com/subject/2/",
+                "review_url": "https://book.douban.com/review/2/",
+                "reviewer_url": "https://www.douban.com/people/reviewer-a/",
+            },
+            {
+                "book_url": "https://book.douban.com/subject/3/",
+                "review_url": "https://book.douban.com/review/3/",
+                "reviewer_url": "https://www.douban.com/people/reviewer-a/",
+            },
+            {
+                "book_url": "https://book.douban.com/subject/4/",
+                "review_url": "https://book.douban.com/review/4/",
+                "reviewer_url": "https://example.com/not-people/",
+            },
+        ]
+    )
+    upsert_reviews(reviews)
+
+    urls = fetch_reviewer_urls(limit=10, min_review_count=2)
+
+    assert urls == ["https://www.douban.com/people/reviewer-a/"]
+
+
+@pytest.mark.integration
+def test_fetch_reviewer_urls_excludes_persisted_skips():
+    reviews = pd.DataFrame(
+        [
+            {
+                "book_url": "https://book.douban.com/subject/1/",
+                "review_url": "https://book.douban.com/review/10/",
+                "reviewer_url": "https://www.douban.com/people/reviewer-a/",
+            },
+            {
+                "book_url": "https://book.douban.com/subject/2/",
+                "review_url": "https://book.douban.com/review/11/",
+                "reviewer_url": "https://www.douban.com/people/reviewer-a/",
+            },
+        ]
+    )
+    upsert_reviews(reviews)
+    upsert_skipped_reviewers(
+        pd.DataFrame(
+            [
+                {
+                    "reviewer_url": "https://www.douban.com/people/reviewer-a/",
+                    "reason": "http_404",
+                }
+            ]
+        )
+    )
+
+    urls = fetch_reviewer_urls(limit=10, min_review_count=2)
+
+    assert urls == []
